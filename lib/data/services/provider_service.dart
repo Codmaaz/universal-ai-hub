@@ -168,14 +168,44 @@ class ProviderService {
   Future<List<String>> favoriteModels(String providerId) =>
       _repo.favoriteModels(providerId);
 
-  /// Lists models when the adapter supports it (OpenAI-compatible, Gemini).
+  /// Lists models for a saved provider when the adapter supports it.
   Future<List<String>> fetchModels(String providerId) async {
     final provider = await _repo.findById(providerId);
     if (provider == null) return const [];
-    final adapter = _adapters.forType(provider.type);
-    if (!adapter.capabilities.supportsModelListing) return const [];
     final key = await _tokens.readKey(providerId) ?? '';
-    return adapter.listModels(provider: provider, apiKey: key);
+    return fetchModelsForDraft(draft: provider, apiKey: key);
+  }
+
+  /// Fetches models for a provider draft that has not been saved yet.
+  Future<List<String>> fetchModelsForDraft({
+    required AIProvider draft,
+    required String apiKey,
+  }) async {
+    final adapter = _adapters.forType(draft.type);
+    if (!adapter.capabilities.supportsModelListing) return const [];
+    if (draft.baseUrl.trim().isEmpty) {
+      throw const ApiException(
+        kind: ApiErrorKind.configuration,
+        message: 'Enter a Base URL before fetching models.',
+      );
+    }
+    if (apiKey.trim().isEmpty) {
+      throw const ApiException(
+        kind: ApiErrorKind.configuration,
+        message: 'Enter an API key before fetching models.',
+      );
+    }
+    final models = await adapter.listModels(
+      provider: draft,
+      apiKey: apiKey.trim(),
+    );
+    final unique = models
+        .map((model) => model.trim())
+        .where((model) => model.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return unique;
   }
 
   /// Tests a provider draft that has not been persisted yet (wizard flow).

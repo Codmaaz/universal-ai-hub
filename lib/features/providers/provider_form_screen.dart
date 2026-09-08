@@ -48,6 +48,9 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
   final List<_HeaderEntry> _headers = [];
   bool _saving = false;
   bool _testing = false;
+  bool _fetchingModels = false;
+  List<String> _availableModels = [];
+  String? _modelsFetchError;
   String? _baseError;
   String? _modelError;
 
@@ -156,6 +159,8 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
       }
       _authValueCtrl.text =
           _auth == AuthMethod.customHeader ? r'{{API_KEY}}' : _authValueCtrl.text;
+      _availableModels = [];
+      _modelsFetchError = null;
       _baseError = null;
       _modelError = null;
     });
@@ -228,7 +233,106 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+    Future<void> _fetchModels() async {
+  FocusScope.of(context).unfocus();
 
+  if (_fetchingModels) return;
+
+  final urlError = UrlBuilder.validate(_baseCtrl.text);
+
+  if (urlError != null) {
+    showAppSnack(context, urlError, error: true);
+    return;
+  }
+
+  final apiKey = _keyCtrl.text.trim();
+
+  if (apiKey.isEmpty) {
+    showAppSnack(
+      context,
+      'Enter an API key first.',
+      error: true,
+    );
+    return;
+  }
+
+  final draft = _draft();
+
+  final adapter = AdapterRegistry.forType(_type);
+
+  if (!adapter.capabilities.supportsModelListing) {
+    showAppSnack(
+      context,
+      'This provider type does not support automatic model listing.',
+      error: true,
+    );
+    return;
+  }
+
+  setState(() {
+    _fetchingModels = true;
+    _modelsFetchError = null;
+  });
+
+  try {
+    final models =
+        await services.providerService.fetchModelsForDraft(
+      draft: draft,
+      apiKey: apiKey,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _availableModels = models;
+      _fetchingModels = false;
+
+      if (models.isEmpty) {
+        _modelsFetchError =
+            'The API returned an empty model list.';
+      }
+
+      if (models.isNotEmpty &&
+          _modelCtrl.text.trim().isEmpty) {
+        _modelCtrl.text = models.first;
+      }
+    });
+
+    if (models.isNotEmpty) {
+      showAppSnack(
+        context,
+        '${models.length} models found.',
+      );
+    }
+  } on ApiException catch (e) {
+    if (!mounted) return;
+
+    setState(() {
+      _fetchingModels = false;
+      _modelsFetchError = e.message;
+    });
+
+    showAppSnack(
+      context,
+      e.message,
+      error: true,
+    );
+  } catch (_) {
+    if (!mounted) return;
+
+    setState(() {
+      _fetchingModels = false;
+      _modelsFetchError =
+          'Could not fetch models. Check the Base URL and API key.';
+    });
+
+    showAppSnack(
+      context,
+      'Could not fetch models. Check the Base URL and API key.',
+      error: true,
+    );
+  }
+}
   Future<void> _test() async {
     FocusScope.of(context).unfocus();
     final urlError = UrlBuilder.validate(_baseCtrl.text);
@@ -360,6 +464,7 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
           // API key + auth
           TextField(
             controller: _keyCtrl,
+            onEditingComplete: _fetchModels,
             obscureText: !_revealKey,
             autocorrect: false,
             enableSuggestions: false,
@@ -458,19 +563,83 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
           // 4. Model
           const _StepLabel(step: 4, title: 'Model'),
           const SizedBox(height: 8),
-          TextField(
-            controller: _modelCtrl,
-            decoration: InputDecoration(
-              labelText: 'Model',
-              hintText: _modelHint(),
-              helperText: _type == ProviderType.custom
-                  ? 'Only needed if your template uses {{MODEL}}.'
-                  : 'You can also fetch the model list from the chat screen.',
-              errorText: _modelError,
+          if (_availableModels.isNotEmpty)
+            DropdownButtonFormField<String>(
+              value: _availableModels.contains(_modelCtrl.text.trim())
+                  ? _modelCtrl.text.trim()
+                  : null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Available models',
+                helperText: 'Loaded automatically from your provider.',
+                prefixIcon: Icon(Icons.smart_toy_outlined),
+              ),
+              items: [
+                for (final model in _availableModels)
+                  DropdownMenuItem(
+                    value: model,
+                    child: Text(model, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (model) {
+                if (model == null) return;
+                setState(() {
+                  _modelCtrl.text = model;
+                  _modelError = null;
+                });
+              },
+            )
+          else
+            TextField(
+              controller: _modelCtrl,
+              decoration: InputDecoration(
+                labelText: 'Model',
+                hintText: _modelHint(),
+                helperText: _type == ProviderType.custom
+                    ? 'Only needed if your template uses {{MODEL}}.'
+                    : 'Enter your API key, then fetch models automatically.',
+                errorText: _modelError,
+              ),
+              onChanged: (_) => setState(() => _modelError = null),
             ),
-            onChanged: (_) => setState(() => _modelError = null),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _fetchingModels ? null : _fetchModels,
+              icon: _fetchingModels
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_download_outlined),
+              label: Text(
+                _fetchingModels
+                    ? 'Fetching models…'
+                    : 'Fetch models automatically',
+              ),
+            ),
           ),
-          if (AdapterRegistry.modelHints(_type).isNotEmpty) ...[
+          if (_modelsFetchError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _modelsFetchError!,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
+          if (_availableModels.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${_availableModels.length} models available',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (AdapterRegistry.modelHints(_type).isNotEmpty &&
+              _availableModels.isEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
@@ -479,8 +648,7 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
                 for (final hint in AdapterRegistry.modelHints(_type))
                   ActionChip(
                     label: Text(hint, style: const TextStyle(fontSize: 12)),
-                    onPressed: () =>
-                        setState(() => _modelCtrl.text = hint),
+                    onPressed: () => setState(() => _modelCtrl.text = hint),
                   ),
               ],
             ),

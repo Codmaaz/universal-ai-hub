@@ -18,6 +18,13 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  final ValueNotifier<int> _chatRefreshSignal = ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _chatRefreshSignal.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,11 +32,11 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: const [
-          ConversationListScreen(),
-          ProvidersScreen(),
-          PromptsScreen(),
-          SettingsScreen(),
+        children: [
+          ConversationListScreen(refreshSignal: _chatRefreshSignal),
+          const ProvidersScreen(),
+          const PromptsScreen(),
+          const SettingsScreen(),
         ],
       ),
       floatingActionButton: _index == 0
@@ -43,7 +50,10 @@ class _HomeShellState extends State<HomeShell> {
           : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          setState(() => _index = i);
+          if (i == 0) _chatRefreshSignal.value++;
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
@@ -84,10 +94,9 @@ class _HomeShellState extends State<HomeShell> {
         builder: (_) => ChatScreen(conversationId: conv.id),
       ),
     );
-    // Refresh conversation list when returning.
-    if (context.mounted) {
-      setState(() {});
-    }
+    // Refresh the persisted conversation list after returning.
+    _chatRefreshSignal.value++;
+    if (context.mounted) setState(() {});
   }
 }
 
