@@ -702,7 +702,6 @@ String? _modelError;
             methods: _capMethod,
             templates: _capTemplate,
             responses: _capResponse,
-            onEnsure: _ensureUniversalEditors,
           ), const SizedBox(height: 20)],
 
           if (_type == ProviderType.custom) ...[
@@ -1114,7 +1113,7 @@ class _UniversalMappingEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final caps = this.capabilities;
+    final caps = widget.capabilities;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const _StepLabel(
         step: 5,
@@ -1133,7 +1132,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               Text(cap.label, style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               TextField(
-                controller: this.methods[cap],
+                controller: widget.methods[cap],
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
                   labelText: 'HTTP method', hintText: 'POST', isDense: true,
@@ -1141,7 +1140,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: this.endpoints[cap],
+                controller: widget.endpoints[cap],
                 decoration: InputDecoration(
                   labelText: 'Endpoint',
                   hintText: cap == AiCapability.chat ? '/chat' : '/${cap.name}',
@@ -1151,7 +1150,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: this.templates[cap],
+                controller: widget.templates[cap],
                 maxLines: 6,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 decoration: InputDecoration(
@@ -1165,7 +1164,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: this.responses[cap],
+                controller: widget.responses[cap],
                 decoration: InputDecoration(
                   labelText: 'Response path (optional for automatic extraction)',
                   hintText: cap == AiCapability.chat ? 'choices[0].message.content' : 'data[0].url',

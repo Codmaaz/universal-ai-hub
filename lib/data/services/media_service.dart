@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import '../../core/models/types.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/provider.dart';
 import '../../core/models/types.dart';

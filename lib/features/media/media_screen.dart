@@ -45,7 +45,7 @@ class _MediaScreenState extends State<MediaScreen> {
   }
 
   Future<void> _pick() async {
-    final r = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+    final r = await FilePicker.pickFiles(type: FileType.any, allowMultiple: false);
     if (r?.files.single.path != null && mounted) setState(() => _file = r!.files.single.path);
   }
 
@@ -146,7 +146,7 @@ class _MediaScreenState extends State<MediaScreen> {
       ] else if (url != null && _image) ...[
         const SizedBox(height: 8),
         ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, errorBuilder: (_, __, ___) => const Text('Image preview unavailable'))),
-      ]
+      ],
       if (url != null && !_image) ...[const SizedBox(height: 8), _VideoPreview(url: url)],
       const SizedBox(height: 4), Wrap(spacing: 4, children: [
         if (!_image && item.jobId != null && item.status != MediaStatus.completed && item.status != MediaStatus.failed) OutlinedButton.icon(onPressed: _busy ? null : () => _poll(item), icon: const Icon(Icons.sync), label: const Text('Check status')),
