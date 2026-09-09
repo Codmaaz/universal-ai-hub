@@ -43,7 +43,7 @@ class _MediaScreenState extends State<MediaScreen> {
   }
 
   Future<void> _pick() async {
-    final r = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+    final r = await FilePicker().pickFiles(type: FileType.any, allowMultiple: false);
     if (r?.files.single.path != null && mounted) setState(() => _file = r!.files.single.path);
   }
 
