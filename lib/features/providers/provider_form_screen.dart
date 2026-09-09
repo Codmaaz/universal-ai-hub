@@ -1114,7 +1114,7 @@ class _UniversalMappingEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final caps = widget.capabilities;
+    final caps = this.capabilities;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const _StepLabel(
         step: 5,
@@ -1133,7 +1133,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               Text(cap.label, style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.methods[cap],
+                controller: this.methods[cap],
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
                   labelText: 'HTTP method', hintText: 'POST', isDense: true,
@@ -1141,7 +1141,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.endpoints[cap],
+                controller: this.endpoints[cap],
                 decoration: InputDecoration(
                   labelText: 'Endpoint',
                   hintText: cap == AiCapability.chat ? '/chat' : '/${cap.name}',
@@ -1151,7 +1151,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.templates[cap],
+                controller: this.templates[cap],
                 maxLines: 6,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 decoration: InputDecoration(
@@ -1165,7 +1165,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.responses[cap],
+                controller: this.responses[cap],
                 decoration: InputDecoration(
                   labelText: 'Response path (optional for automatic extraction)',
                   hintText: cap == AiCapability.chat ? 'choices[0].message.content' : 'data[0].url',
