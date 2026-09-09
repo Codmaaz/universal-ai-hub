@@ -1,4 +1,4 @@
-# Universal AI Hub V3
+# Universal AI Hub
 
 A bring-your-own-key Flutter AI chat client supporting multiple AI providers and custom HTTP APIs.
 
@@ -49,16 +49,3 @@ The included workflow `.github/workflows/build-apk.yml` automatically:
 
 ## Security
 API keys should only be entered by the user and stored locally. Never commit API keys, `local.properties`, keystores, or signing passwords to GitHub.
-
-
-## V3 / 1.1.0 update
-- Automatic model discovery for supported providers.
-- Model selection dropdown after discovery, with manual fallback.
-- Chat history refresh when returning to Chats.
-- Search, rename, delete and export conversations.
-- Streaming, cancellation, regeneration and message editing.
-- Secure local API-key storage and secret masking.
-- GitHub Actions now pins Java 17, runs analysis and tests before building the APK.
-
-## Recommended mobile release flow
-Push changes to GitHub, open **Actions**, wait for the green build, then download the APK from **Artifacts**. For a permanent GitHub Release, push a tag such as `v1.1.0`.

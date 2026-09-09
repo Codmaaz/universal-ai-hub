@@ -1,7 +1,7 @@
 name: universal_ai_hub
 description: "Universal AI Hub — bring-your-own-key AI chat client for multiple providers (OpenAI-compatible, Anthropic, Gemini, Custom APIs)."
 publish_to: 'none'
-version: 1.1.0+2
+version: 4.1.0+5
 
 environment:
   sdk: ^3.13.2
@@ -28,6 +28,8 @@ dependencies:
   highlight: ^0.7.0
   share_plus: ^12.0.2
   file_picker: ^11.0.3
+  video_player: ^2.9.2
+  cross_file: ^0.3.4+2
   markdown: ^7.3.1
 
 dev_dependencies:

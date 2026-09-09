@@ -218,7 +218,19 @@ class GeminiAdapter implements AIProviderAdapter {
             : null,
       );
     } on DioException catch (e) {
-      throw ApiException.fromDio(e, providerName: request.provider.name);
+      final apiError = ApiException.fromDio(e, providerName: request.provider.name);
+      throw apiError.copyWith(partialContent: buffer.toString());
+    } catch (e) {
+      throw ApiException(
+        kind: ApiErrorKind.streamingError,
+        message: 'The streaming connection dropped while receiving the response.',
+        tip: buffer.isNotEmpty
+            ? 'The response received so far was preserved.'
+            : 'Try again or disable streaming for this provider.',
+        providerName: request.provider.name,
+        partialContent: buffer.toString(),
+        raw: e,
+      );
     }
   }
 

@@ -22,6 +22,7 @@ abstract final class AppDatabase {
       },
       onUpgrade: (db, oldV, newV) async {
         if (oldV < 1) await _createSchema(db);
+        if (oldV < 2) await _upgradeV2(db);
       },
     );
   }
@@ -82,8 +83,23 @@ abstract final class AppDatabase {
         PRIMARY KEY (provider_id, model)
       )
     ''');
+    await _upgradeV2(db);
   }
 
+  static Future<void> _upgradeV2(Database db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS media_items (
+      id TEXT PRIMARY KEY, kind TEXT NOT NULL, provider_id TEXT NOT NULL,
+      provider_name TEXT NOT NULL, model TEXT NOT NULL, prompt TEXT NOT NULL,
+      negative_prompt TEXT NOT NULL DEFAULT '', source_file_path TEXT,
+      remote_url TEXT, local_path TEXT, status TEXT NOT NULL,
+      job_id TEXT, metadata TEXT NOT NULL DEFAULT '{}', error TEXT,
+      created_at INTEGER, updated_at INTEGER
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_media_created ON media_items(created_at DESC)');
+  }
+
+
+  /// Closes the cached database connection safely.
   static Future<void> close() async {
     await _db?.close();
     _db = null;
@@ -98,6 +114,7 @@ abstract final class AppDatabase {
       'providers',
       'prompts',
       'saved_models',
+      'media_items',
     ]) {
       await db.delete(table);
     }

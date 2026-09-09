@@ -46,13 +46,20 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
   bool _revealKey = false;
   bool _hasStoredKey = false;
   final List<_HeaderEntry> _headers = [];
+  final Map<AiCapability, TextEditingController> _capEndpoint = {};
+  final Map<AiCapability, TextEditingController> _capMethod = {};
+  final Map<AiCapability, TextEditingController> _capTemplate = {};
+  final Map<AiCapability, TextEditingController> _capResponse = {};
+  Set<AiCapability> _selectedCapabilities = {AiCapability.chat};
   bool _saving = false;
-  bool _testing = false;
-  bool _fetchingModels = false;
-  List<String> _availableModels = [];
-  String? _modelsFetchError;
-  String? _baseError;
-  String? _modelError;
+bool _testing = false;
+bool _fetchingModels = false;
+
+List<String> _availableModels = [];
+String? _modelsFetchError;
+
+String? _baseError;
+String? _modelError;
 
   // Track whether user has customized base URL/model so type changes can
   // refresh suggestions without clobbering their input.
@@ -74,6 +81,8 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
     _http = init?.httpMethod ?? HttpMethod.post;
 
     if (init != null) {
+      _selectedCapabilities = init.enabledCapabilities.toSet();
+      if (_selectedCapabilities.isEmpty) _selectedCapabilities = {AiCapability.chat};
       _nameCtrl.text = init.name;
       _baseCtrl.text = init.baseUrl;
       _endpointCtrl.text = init.endpoint;
@@ -88,6 +97,15 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
             name: TextEditingController(text: h.name),
             value: TextEditingController(text: h.value)));
       }
+      for (final capability in AiCapability.values) {
+        final key = capability.name;
+        if (init.capabilityEndpoints.containsKey(key) || init.capabilityRequestTemplates.containsKey(key) || init.capabilityResponsePaths.containsKey(key)) {
+          _capEndpoint[capability] = TextEditingController(text: init.capabilityEndpoints[key] ?? '');
+          _capMethod[capability] = TextEditingController(text: init.capabilityMethods[key] ?? 'POST');
+          _capTemplate[capability] = TextEditingController(text: init.capabilityRequestTemplates[key] ?? '');
+          _capResponse[capability] = TextEditingController(text: init.capabilityResponsePaths[key] ?? '');
+        }
+      }
       _hasStoredKeyFuture();
     } else {
       _baseCtrl.text = defaults.baseUrl;
@@ -96,6 +114,9 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
       }
       if (_type == ProviderType.gemini) {
         _authNameCtrl.text = 'key';
+      }
+      if (_type == ProviderType.universalHttp) {
+        _ensureUniversalEditors();
       }
     }
   }
@@ -125,6 +146,7 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
       h.name.dispose();
       h.value.dispose();
     }
+    for (final c in [..._capEndpoint.values, ..._capMethod.values, ..._capTemplate.values, ..._capResponse.values]) { c.dispose(); }
     super.dispose();
   }
 
@@ -150,6 +172,10 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
         _modelCtrl.text = defaults.model;
       }
       // Sensible auth default per family.
+      if (next == ProviderType.universalHttp) {
+        if (_selectedCapabilities.isEmpty) _selectedCapabilities = {AiCapability.chat};
+        _ensureUniversalEditors();
+      }
       if (next == ProviderType.gemini) {
         _auth = AuthMethod.queryParam;
         _authNameCtrl.text = 'key';
@@ -159,12 +185,11 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
       }
       _authValueCtrl.text =
           _auth == AuthMethod.customHeader ? r'{{API_KEY}}' : _authValueCtrl.text;
-      _availableModels = [];
-      _modelsFetchError = null;
       _baseError = null;
       _modelError = null;
     });
   }
+
 
   AIProvider _draft() => AIProvider(
         id: _isEdit ? widget.initial!.id : 'draft',
@@ -185,6 +210,13 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
         httpMethod: _http,
         requestBodyTemplate: _bodyTemplateCtrl.text,
         responsePath: _responsePathCtrl.text,
+        enabledCapabilities: _type == ProviderType.universalHttp
+            ? _universalCapabilities()
+            : const [AiCapability.chat],
+        capabilityEndpoints: _universalMap(_capEndpoint),
+        capabilityMethods: _universalMap(_capMethod),
+        capabilityRequestTemplates: _universalMap(_capTemplate),
+        capabilityResponsePaths: _universalMap(_capResponse),
       );
 
   Future<void> _save() async {
@@ -225,6 +257,13 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
         httpMethod: _http,
         requestBodyTemplate: _bodyTemplateCtrl.text,
         responsePath: _responsePathCtrl.text,
+        enabledCapabilities: _type == ProviderType.universalHttp
+            ? _universalCapabilities()
+            : const [AiCapability.chat],
+        capabilityEndpoints: _universalMap(_capEndpoint),
+        capabilityMethods: _universalMap(_capMethod),
+        capabilityRequestTemplates: _universalMap(_capTemplate),
+        capabilityResponsePaths: _universalMap(_capResponse),
       );
       await services.state.refreshProviders();
       if (!mounted) return;
@@ -245,18 +284,21 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
     return;
   }
 
-  final apiKey = _keyCtrl.text.trim();
+  final draft = _draft();
+  final typedKey = _keyCtrl.text.trim();
+  final apiKey = typedKey.isNotEmpty
+      ? typedKey
+      : (await services.providerService.readKey(draft.id) ?? '');
 
   if (apiKey.isEmpty) {
     showAppSnack(
       context,
-      'Enter an API key first.',
+      'Add an API key first, then tap Update.',
       error: true,
     );
     return;
   }
 
-  final draft = _draft();
 
   final adapter = AdapterRegistry.forType(_type);
 
@@ -464,7 +506,6 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
           // API key + auth
           TextField(
             controller: _keyCtrl,
-            onEditingComplete: _fetchModels,
             obscureText: !_revealKey,
             autocorrect: false,
             enableSuggestions: false,
@@ -531,7 +572,7 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
             },
           ),
           const SizedBox(height: 8),
-          if (_type == ProviderType.custom ||
+          if (_type == ProviderType.custom || _type == ProviderType.universalHttp ||
               _auth == AuthMethod.customHeader ||
               _auth == AuthMethod.queryParam)
             _CustomHeadersEditor(
@@ -546,7 +587,7 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
                 _headers.remove(h);
               }),
             ),
-          if (_type != ProviderType.custom) ...[
+          if (_type != ProviderType.custom && _type != ProviderType.universalHttp) ...[
             const SizedBox(height: 12),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -563,83 +604,56 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
           // 4. Model
           const _StepLabel(step: 4, title: 'Model'),
           const SizedBox(height: 8),
-          if (_availableModels.isNotEmpty)
-            DropdownButtonFormField<String>(
-              value: _availableModels.contains(_modelCtrl.text.trim())
-                  ? _modelCtrl.text.trim()
-                  : null,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Available models',
-                helperText: 'Loaded automatically from your provider.',
-                prefixIcon: Icon(Icons.smart_toy_outlined),
-              ),
-              items: [
-                for (final model in _availableModels)
-                  DropdownMenuItem(
-                    value: model,
-                    child: Text(model, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (model) {
-                if (model == null) return;
-                setState(() {
-                  _modelCtrl.text = model;
-                  _modelError = null;
-                });
-              },
-            )
-          else
-            TextField(
-              controller: _modelCtrl,
-              decoration: InputDecoration(
-                labelText: 'Model',
-                hintText: _modelHint(),
-                helperText: _type == ProviderType.custom
-                    ? 'Only needed if your template uses {{MODEL}}.'
-                    : 'Enter your API key, then fetch models automatically.',
-                errorText: _modelError,
-              ),
-              onChanged: (_) => setState(() => _modelError = null),
+          TextField(
+            controller: _modelCtrl,
+            decoration: InputDecoration(
+              labelText: 'Model',
+              hintText: _modelHint(),
+              helperText: _type == ProviderType.custom || _type == ProviderType.universalHttp
+                  ? 'Optional unless the selected capability template uses {{MODEL}}.'
+                  : 'You can also fetch the model list from the chat screen.',
+              errorText: _modelError,
             ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _fetchingModels ? null : _fetchModels,
-              icon: _fetchingModels
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.cloud_download_outlined),
-              label: Text(
-                _fetchingModels
-                    ? 'Fetching models…'
-                    : 'Fetch models automatically',
-              ),
-            ),
+            onChanged: (_) => setState(() => _modelError = null),
           ),
-          if (_modelsFetchError != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _modelsFetchError!,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.error,
+          if (AdapterRegistry.forType(_type).capabilities.supportsModelListing) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _fetchingModels ? null : _fetchModels,
+                icon: _fetchingModels
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh),
+                label: Text(_fetchingModels ? 'Updating models…' : 'Update models'),
               ),
             ),
+            if (_modelsFetchError != null) ...[
+              const SizedBox(height: 6),
+              Text(_modelsFetchError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+            if (_availableModels.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('${_availableModels.length} models available. Tap a model below to select it.',
+                style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _availableModels.take(40).map((model) => ActionChip(
+                  label: Text(model, style: const TextStyle(fontSize: 12)),
+                  onPressed: () => setState(() => _modelCtrl.text = model),
+                )).toList(),
+              ),
+              if (_availableModels.length > 40)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('Showing the first 40 models. You can still type any model ID manually.',
+                    style: Theme.of(context).textTheme.bodySmall),
+                ),
+            ],
           ],
-          if (_availableModels.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              '${_availableModels.length} models available',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (AdapterRegistry.modelHints(_type).isNotEmpty &&
-              _availableModels.isEmpty) ...[
+          if (AdapterRegistry.modelHints(_type).isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
@@ -648,7 +662,8 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
                 for (final hint in AdapterRegistry.modelHints(_type))
                   ActionChip(
                     label: Text(hint, style: const TextStyle(fontSize: 12)),
-                    onPressed: () => setState(() => _modelCtrl.text = hint),
+                    onPressed: () =>
+                        setState(() => _modelCtrl.text = hint),
                   ),
               ],
             ),
@@ -656,6 +671,40 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
           const SizedBox(height: 24),
 
           // 5. Custom API configuration (advanced)
+          if (_type == ProviderType.universalHttp) ...[
+            const _StepLabel(step: 5, title: 'Capabilities', subtitle: 'Select what this API provides.'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final cap in AiCapability.values)
+                  FilterChip(
+                    label: Text(cap.label),
+                    selected: _selectedCapabilities.contains(cap),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedCapabilities.add(cap);
+                        } else if (_selectedCapabilities.length > 1) {
+                          _selectedCapabilities.remove(cap);
+                        }
+                        _ensureUniversalEditors();
+                      });
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _UniversalMappingEditor(
+            capabilities: _universalCapabilities(),
+            endpoints: _capEndpoint,
+            methods: _capMethod,
+            templates: _capTemplate,
+            responses: _capResponse,
+            onEnsure: _ensureUniversalEditors,
+          ), const SizedBox(height: 20)],
+
           if (_type == ProviderType.custom) ...[
             const _StepLabel(
                 step: 5,
@@ -781,6 +830,22 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
     setState(() {});
   }
 
+  List<AiCapability> _universalCapabilities() => _selectedCapabilities.toList();
+
+  Map<String, String> _universalMap(Map<AiCapability, TextEditingController> source) => {
+    for (final entry in source.entries)
+      if (entry.value.text.trim().isNotEmpty) entry.key.name: entry.value.text.trim(),
+  };
+
+  void _ensureUniversalEditors() {
+    for (final cap in _universalCapabilities()) {
+      _capEndpoint.putIfAbsent(cap, () => TextEditingController());
+      _capMethod.putIfAbsent(cap, () => TextEditingController(text: 'POST'));
+      _capTemplate.putIfAbsent(cap, () => TextEditingController());
+      _capResponse.putIfAbsent(cap, () => TextEditingController());
+    }
+  }
+
   String _defaultPathLabel() {
     switch (_type) {
       case ProviderType.openaiCompatible:
@@ -791,6 +856,8 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
         return 'the URL is built per model (:generateContent)';
       case ProviderType.custom:
         return 'the Base URL is used as-is';
+      case ProviderType.universalHttp:
+        return 'configured per capability';
     }
   }
 
@@ -804,6 +871,8 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
         return 'e.g. gemini-2.5-flash';
       case ProviderType.custom:
         return 'optional';
+      case ProviderType.universalHttp:
+        return 'e.g. model-name';
     }
   }
 
@@ -876,6 +945,7 @@ class _ProviderFormScreenState extends State<ProviderFormScreen> {
       'Connection',
       'Model',
       if (_type == ProviderType.custom) 'Custom',
+      if (_type == ProviderType.universalHttp) 'Mappings',
       'Save',
     ];
     return Container(
@@ -953,7 +1023,9 @@ class _TypePicker extends StatelessWidget {
       (ProviderType.gemini, Icons.auto_awesome,
           'Gemini', 'Google generative language API'),
       (ProviderType.custom, Icons.extension,
-          'Custom API', 'Any HTTP API with a template'),
+          'Custom API', 'Simple one-endpoint custom request'),
+      (ProviderType.universalHttp, Icons.hub,
+          'Universal HTTP API', 'Map chat, image, video, audio and other capabilities'),
     ];
     return Column(
       children: [
@@ -1021,6 +1093,91 @@ class _CapabilityRow extends StatelessWidget {
           ),
       ],
     );
+  }
+}
+
+
+class _UniversalMappingEditor extends StatelessWidget {
+  const _UniversalMappingEditor({
+    required this.capabilities,
+    required this.endpoints,
+    required this.methods,
+    required this.templates,
+    required this.responses,
+  });
+
+  final List<AiCapability> capabilities;
+  final Map<AiCapability, TextEditingController> endpoints;
+  final Map<AiCapability, TextEditingController> methods;
+  final Map<AiCapability, TextEditingController> templates;
+  final Map<AiCapability, TextEditingController> responses;
+
+  @override
+  Widget build(BuildContext context) {
+    final caps = widget.capabilities;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const _StepLabel(
+        step: 5,
+        title: 'Universal capability mapping',
+        subtitle: 'Tell the hub how each API operation is called and where its result lives.',
+      ),
+      const SizedBox(height: 8),
+      const Text('The provider is not assumed to be OpenAI-compatible. Each capability can have its own endpoint, request template, and response path.'),
+      const SizedBox(height: 12),
+      for (final cap in caps) ...[
+        Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(cap.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: widget.methods[cap],
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'HTTP method', hintText: 'POST', isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: widget.endpoints[cap],
+                decoration: InputDecoration(
+                  labelText: 'Endpoint',
+                  hintText: cap == AiCapability.chat ? '/chat' : '/${cap.name}',
+                  helperText: 'Path appended to the Base URL. Full URLs are also accepted by the runtime.',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: widget.templates[cap],
+                maxLines: 6,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                decoration: InputDecoration(
+                  labelText: 'Request JSON template',
+                  hintText: cap == AiCapability.chat
+                      ? '{"model":"{{MODEL}}","messages":{{MESSAGES}}}'
+                      : '{"model":"{{MODEL}}","prompt":"{{PROMPT}}"}',
+                  helperText: 'Tokens: {{MODEL}} {{PROMPT}} {{SYSTEM_PROMPT}} {{MESSAGES}} {{SIZE}} {{N}} {{NEGATIVE_PROMPT}} {{ASPECT_RATIO}} {{DURATION}}',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: widget.responses[cap],
+                decoration: InputDecoration(
+                  labelText: 'Response path (optional for automatic extraction)',
+                  hintText: cap == AiCapability.chat ? 'choices[0].message.content' : 'data[0].url',
+                  helperText: 'Dot/bracket notation. For images/videos, URLs or base64 are also detected automatically.',
+                  isDense: true,
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ],
+    ]);
   }
 }
 

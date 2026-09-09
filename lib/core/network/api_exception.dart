@@ -41,6 +41,7 @@ class ApiException implements Exception {
     this.sanitizedUrl,
     this.durationMs,
     this.raw,
+    this.partialContent,
   });
 
   final ApiErrorKind kind;
@@ -59,9 +60,29 @@ class ApiException implements Exception {
   /// Original error kept out of any logs/UI (used only for debugging in code).
   final Object? raw;
 
+  /// Partial streamed text that was safely received before a transport
+  /// failure. The UI can preserve it instead of discarding a long answer.
+  final String? partialContent;
+
+  ApiException copyWith({String? partialContent}) => ApiException(
+        kind: kind,
+        message: message,
+        tip: tip,
+        httpStatus: httpStatus,
+        providerName: providerName,
+        sanitizedBody: sanitizedBody,
+        sanitizedUrl: sanitizedUrl,
+        durationMs: durationMs,
+        raw: raw,
+        partialContent: partialContent ?? this.partialContent,
+      );
+
   bool get isCancellation => kind == ApiErrorKind.cancelled;
 
   String get kindLabel => kind.heading;
+
+  @override
+  String toString() => message;
 
   /// Safe error classifier. Masks anything secret found in bodies/urls.
   factory ApiException.fromDio(DioException e, {String? providerName}) {
@@ -70,6 +91,8 @@ class ApiException implements Exception {
     String? rawBody;
     if (data is String) {
       rawBody = data;
+    } else if (data is ResponseBody) {
+      rawBody = 'Binary/stream response body (not displayed as text).';
     } else if (data != null) {
       try {
         rawBody = jsonEncode(data);
@@ -77,9 +100,12 @@ class ApiException implements Exception {
         rawBody = data.toString();
       }
     }
+    final scrubbedMessage = e.message == null || e.message!.trim().isEmpty
+        ? null
+        : SecretMasker.scrubSecrets(e.message!.trim());
     final body = rawBody != null && rawBody.isNotEmpty
         ? _truncate(SecretMasker.scrubJsonBody(rawBody))
-        : null;
+        : scrubbedMessage;
     final url = SecretMasker.scrubSecrets(e.requestOptions.uri.toString());
 
     final kind = classifyDio(e, status);

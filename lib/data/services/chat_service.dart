@@ -22,7 +22,8 @@ class SendTurnParams {
     this.onDelta,
     this.inspectorEnabled = false,
     this.connectTimeout = const Duration(seconds: 30),
-    this.receiveTimeout = const Duration(seconds: 120),
+    this.receiveTimeout = const Duration(seconds: 600),
+    this.retryCount = 1,
   });
 
   final AIProvider provider;
@@ -36,6 +37,9 @@ class SendTurnParams {
   final bool inspectorEnabled;
   final Duration connectTimeout;
   final Duration receiveTimeout;
+  /// Retries only transient transport failures that occur before any
+  /// streamed content has been received.
+  final int retryCount;
 }
 
 /// Orchestrates one AI turn: fetch the secret, resolve the adapter, stream or
@@ -71,19 +75,42 @@ class ChatService {
         tip: 'Open the provider and add your API key, then try again.',
       );
     }
-    return adapter.send(AiTurnRequest(
-      provider: params.provider,
-      apiKey: key,
-      messages: params.messages,
-      model: params.model,
-      systemPrompt: params.systemPrompt,
-      settings: params.settings,
-      streaming: params.streaming,
-      cancelToken: params.cancelToken,
-      onDelta: params.onDelta,
-      inspectorEnabled: params.inspectorEnabled,
-      connectTimeout: params.connectTimeout,
-      receiveTimeout: params.receiveTimeout,
-    ));
+    var attempt = 0;
+    var streamedAny = false;
+    final maxRetries = params.retryCount.clamp(0, 3);
+
+    while (true) {
+      try {
+        return await adapter.send(AiTurnRequest(
+          provider: params.provider,
+          apiKey: key,
+          messages: params.messages,
+          model: params.model,
+          systemPrompt: params.systemPrompt,
+          settings: params.settings,
+          streaming: params.streaming,
+          cancelToken: params.cancelToken,
+          onDelta: (delta) {
+            streamedAny = true;
+            params.onDelta?.call(delta);
+          },
+          inspectorEnabled: params.inspectorEnabled,
+          connectTimeout: params.connectTimeout,
+          receiveTimeout: params.receiveTimeout,
+        ));
+      } on ApiException catch (e) {
+        final transient = e.kind == ApiErrorKind.network ||
+            e.kind == ApiErrorKind.timeout;
+        if (!transient || streamedAny || attempt >= maxRetries ||
+            params.cancelToken?.isCancelled == true) {
+          if (streamedAny && e.partialContent == null) {
+            throw e.copyWith(partialContent: '');
+          }
+          rethrow;
+        }
+        attempt++;
+        await Future<void>.delayed(Duration(milliseconds: 700 * attempt));
+      }
+    }
   }
 }

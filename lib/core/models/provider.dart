@@ -128,6 +128,11 @@ class AIProvider {
     this.customAuthHeaderName = '',
     this.customAuthHeaderValue = '',
     this.customHeaders = const [],
+    this.enabledCapabilities = const [AiCapability.chat],
+    this.capabilityEndpoints = const {},
+    this.capabilityMethods = const {},
+    this.capabilityRequestTemplates = const {},
+    this.capabilityResponsePaths = const {},
     this.model = '',
     this.endpoint = '',
     this.isEnabled = true,
@@ -158,6 +163,13 @@ class AIProvider {
   /// Extra headers — values may embed `{{API_KEY}}`.
   final List<HttpHeader> customHeaders;
 
+  /// Capabilities and per-capability HTTP mappings for the universal connector.
+  final List<AiCapability> enabledCapabilities;
+  final Map<String, String> capabilityEndpoints;
+  final Map<String, String> capabilityMethods;
+  final Map<String, String> capabilityRequestTemplates;
+  final Map<String, String> capabilityResponsePaths;
+
   /// Last used model (blank until the user picks or types one).
   final String model;
 
@@ -187,6 +199,8 @@ class AIProvider {
         return '';
       case ProviderType.custom:
         return '';
+      case ProviderType.universalHttp:
+        return '';
     }
   }
 
@@ -198,6 +212,7 @@ class AIProvider {
           supportsStreaming: true,
           supportsModelListing: true,
           supportsSystemPrompt: true,
+          supportsImages: true,
           supportsTemperature: true,
           supportsMaxTokens: true,
           supportsTopP: true,
@@ -242,6 +257,21 @@ class AIProvider {
           supportsMaxTokens: false,
           supportsTopP: false,
         );
+      case ProviderType.universalHttp:
+        return ProviderCapabilities(
+          supportsChat: enabledCapabilities.contains(AiCapability.chat),
+          supportsStreaming: false,
+          supportsModelListing: false,
+          supportsSystemPrompt: enabledCapabilities.contains(AiCapability.chat),
+          supportsImages: enabledCapabilities.contains(AiCapability.imageGeneration),
+          supportsFiles: enabledCapabilities.contains(AiCapability.files),
+          supportsAudio: enabledCapabilities.contains(AiCapability.audioGeneration) ||
+              enabledCapabilities.contains(AiCapability.speechToText) ||
+              enabledCapabilities.contains(AiCapability.textToSpeech),
+          supportsTemperature: false,
+          supportsMaxTokens: false,
+          supportsTopP: false,
+        );
     }
   }
 
@@ -253,6 +283,11 @@ class AIProvider {
     String? customAuthHeaderName,
     String? customAuthHeaderValue,
     List<HttpHeader>? customHeaders,
+    List<AiCapability>? enabledCapabilities,
+    Map<String, String>? capabilityEndpoints,
+    Map<String, String>? capabilityMethods,
+    Map<String, String>? capabilityRequestTemplates,
+    Map<String, String>? capabilityResponsePaths,
     String? model,
     String? endpoint,
     bool? isEnabled,
@@ -272,6 +307,11 @@ class AIProvider {
       customAuthHeaderName: customAuthHeaderName ?? this.customAuthHeaderName,
       customAuthHeaderValue: customAuthHeaderValue ?? this.customAuthHeaderValue,
       customHeaders: customHeaders ?? this.customHeaders,
+      enabledCapabilities: enabledCapabilities ?? this.enabledCapabilities,
+      capabilityEndpoints: capabilityEndpoints ?? this.capabilityEndpoints,
+      capabilityMethods: capabilityMethods ?? this.capabilityMethods,
+      capabilityRequestTemplates: capabilityRequestTemplates ?? this.capabilityRequestTemplates,
+      capabilityResponsePaths: capabilityResponsePaths ?? this.capabilityResponsePaths,
       model: model ?? this.model,
       endpoint: endpoint ?? this.endpoint,
       isEnabled: isEnabled ?? this.isEnabled,
@@ -293,6 +333,11 @@ class AIProvider {
         'customAuthHeaderName': customAuthHeaderName,
         'customAuthHeaderValue': customAuthHeaderValue,
         'customHeaders': customHeaders.map((e) => e.toJson()).toList(),
+        'enabledCapabilities': enabledCapabilities.map((e) => e.name).toList(),
+        'capabilityEndpoints': capabilityEndpoints,
+        'capabilityMethods': capabilityMethods,
+        'capabilityRequestTemplates': capabilityRequestTemplates,
+        'capabilityResponsePaths': capabilityResponsePaths,
         'model': model,
         'endpoint': endpoint,
         'isEnabled': isEnabled,
@@ -315,6 +360,14 @@ class AIProvider {
         customHeaders: ((json['customHeaders'] as List?) ?? const [])
             .map((e) => HttpHeader.fromJson(e as Map<String, dynamic>))
             .toList(),
+        enabledCapabilities: ((json['enabledCapabilities'] as List?) ?? const ['chat'])
+            .map((e) => AiCapability.fromStorage(e.toString()))
+            .whereType<AiCapability>()
+            .toList(),
+        capabilityEndpoints: Map<String, String>.from((json['capabilityEndpoints'] as Map?) ?? const {}),
+        capabilityMethods: Map<String, String>.from((json['capabilityMethods'] as Map?) ?? const {}),
+        capabilityRequestTemplates: Map<String, String>.from((json['capabilityRequestTemplates'] as Map?) ?? const {}),
+        capabilityResponsePaths: Map<String, String>.from((json['capabilityResponsePaths'] as Map?) ?? const {}),
         model: (json['model'] ?? '') as String,
         endpoint: (json['endpoint'] ?? '') as String,
         isEnabled: (json['isEnabled'] as bool?) ?? true,

@@ -14,6 +14,7 @@ abstract final class AdapterRegistry {
     ProviderType.anthropic: const AnthropicAdapter(),
     ProviderType.gemini: const GeminiAdapter(),
     ProviderType.custom: const CustomApiAdapter(),
+    ProviderType.universalHttp: const CustomApiAdapter(),
   };
 
   static AIProviderAdapter forType(ProviderType type) => _adapters[type]!;
@@ -48,6 +49,12 @@ abstract final class AdapterRegistry {
           authMethod: AuthMethod.bearerToken,
           model: '',
         );
+      case ProviderType.universalHttp:
+        return (
+          baseUrl: 'https://example.com/api',
+          authMethod: AuthMethod.bearerToken,
+          model: '',
+        );
     }
   }
 
@@ -62,6 +69,8 @@ abstract final class AdapterRegistry {
           'gpt-4.1',
           'o3-mini',
           'gpt-3.5-turbo',
+          'gpt-image-2',
+          'gpt-image-1',
         ];
       case ProviderType.anthropic:
         return const [
@@ -76,6 +85,8 @@ abstract final class AdapterRegistry {
           'gemini-2.0-flash',
         ];
       case ProviderType.custom:
+        return const [];
+      case ProviderType.universalHttp:
         return const [];
     }
   }
@@ -94,11 +105,14 @@ abstract final class AdapterRegistry {
             return 'Usually https://api.anthropic.com — the /v1/messages '
                 'path is appended automatically.';
           case ProviderType.openaiCompatible:
-            return 'The API root, e.g. https://api.openai.com/v1 or your '
-                'gateway. Trailing slashes and /v1 paths are handled safely.';
+            return 'The API root, e.g. https://api.openai.com/v1, '
+                'https://anymodel.org/v1, or another OpenAI-compatible gateway. '
+                'Trailing slashes and /v1 paths are handled safely.';
           case ProviderType.custom:
             return 'The URL your API listens on. The endpoint/path from the '
                 'Custom section is appended, or use the full URL here.';
+          case ProviderType.universalHttp:
+            return 'Base URL for your API. Each capability can have its own endpoint.';
         }
       case 'model':
         return 'Exact model identifier the provider accepts. Fetch the list '

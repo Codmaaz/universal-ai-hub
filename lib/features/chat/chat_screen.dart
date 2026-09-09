@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -314,7 +315,14 @@ class _ChatScreenState extends State<ChatScreen> {
         connectTimeout: Duration(
             seconds: services.state.settings.connectTimeoutSeconds),
         receiveTimeout: Duration(
-            seconds: services.state.settings.receiveTimeoutSeconds),
+            // Long reasoning/generation requests need a generous transport
+            // window. Respect the user's setting for normal requests, while
+            // ensuring streaming cannot fail merely because a large answer
+            // takes longer than the old 120s default.
+            seconds: _streamingAllowed
+                ? math.max(services.state.settings.receiveTimeoutSeconds, 600)
+                : services.state.settings.receiveTimeoutSeconds),
+        retryCount: services.state.settings.retryCount,
       ));
 
       final content = result.content.trim();
@@ -331,14 +339,24 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       } else {
         _lastRecord = ApiRequestRecordNotifier(null);
-        if (mounted) showApiErrorDialog(context, e);
+        final partial = e.partialContent;
+        if (partial != null && partial.trim().isNotEmpty) {
+          await _finishAssistant(content: partial.trim(), cancelled: false);
+          if (mounted) {
+            showAppSnack(context,
+                'Connection dropped, but the response received so far was saved.',
+                error: true);
+          }
+        } else if (mounted) {
+          showApiErrorDialog(context, e);
+        }
       }
     } on DioException {
       // Cancelled / aborted path surfaced as ApiException by adapters.
       if (mounted) showAppSnack(context, 'Request stopped.');
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        showAppSnack(context, 'Something went wrong while sending.',
+        showAppSnack(context, 'Could not send the message: ${e.toString().replaceFirst('Exception: ', '')}',
             error: true);
       }
     } finally {

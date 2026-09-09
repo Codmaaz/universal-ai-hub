@@ -7,7 +7,8 @@ enum ProviderType {
   openaiCompatible('OpenAI Compatible'),
   anthropic('Anthropic'),
   gemini('Gemini'),
-  custom('Custom API');
+  custom('Custom API'),
+  universalHttp('Universal HTTP API');
 
   const ProviderType(this.label);
   final String label;
@@ -17,6 +18,33 @@ enum ProviderType {
       (t) => t.name == value,
       orElse: () => ProviderType.custom,
     );
+  }
+}
+
+
+/// Operations a user can expose from any HTTP API. The universal connector
+/// stores these flags in the provider JSON, so adding capabilities does not
+/// require a database migration.
+enum AiCapability {
+  chat('Chat'),
+  imageGeneration('Image generation'),
+  videoGeneration('Video generation'),
+  audioGeneration('Audio generation'),
+  speechToText('Speech to text'),
+  textToSpeech('Text to speech'),
+  embeddings('Embeddings'),
+  moderation('Moderation'),
+  files('Files'),
+  custom('Custom');
+
+  const AiCapability(this.label);
+  final String label;
+
+  static AiCapability? fromStorage(String? value) {
+    for (final item in values) {
+      if (item.name == value) return item;
+    }
+    return null;
   }
 }
 

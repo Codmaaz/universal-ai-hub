@@ -8,9 +8,7 @@ import 'chat_screen.dart';
 
 /// Conversation history list with search, rename, delete and export.
 class ConversationListScreen extends StatefulWidget {
-  const ConversationListScreen({super.key, this.refreshSignal});
-
-  final ValueNotifier<int>? refreshSignal;
+  const ConversationListScreen({super.key});
 
   @override
   State<ConversationListScreen> createState() => _ConversationListScreenState();
@@ -25,17 +23,8 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
   @override
   void initState() {
     super.initState();
-    widget.refreshSignal?.addListener(_onExternalRefresh);
     _load();
   }
-
-  @override
-  void dispose() {
-    widget.refreshSignal?.removeListener(_onExternalRefresh);
-    super.dispose();
-  }
-
-  void _onExternalRefresh() => _load();
 
   Future<void> _load() async {
     final services = AppScope.of(context);

@@ -6,6 +6,8 @@ import '../../features/chat/conversation_list_screen.dart';
 import '../../features/prompts/prompts_screen.dart';
 import '../../features/providers/providers_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/media/media_screen.dart';
+import '../../core/models/media_item.dart';
 import '../app_services.dart';
 
 /// Primary navigation shell: Chats / Providers / Prompts / Settings.
@@ -18,13 +20,6 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
-  final ValueNotifier<int> _chatRefreshSignal = ValueNotifier<int>(0);
-
-  @override
-  void dispose() {
-    _chatRefreshSignal.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,11 +27,13 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: [
-          ConversationListScreen(refreshSignal: _chatRefreshSignal),
-          const ProvidersScreen(),
-          const PromptsScreen(),
-          const SettingsScreen(),
+        children: const [
+          ConversationListScreen(),
+          MediaScreen(kind: MediaKind.image),
+          MediaScreen(kind: MediaKind.video),
+          ProvidersScreen(),
+          PromptsScreen(),
+          SettingsScreen(),
         ],
       ),
       floatingActionButton: _index == 0
@@ -50,15 +47,22 @@ class _HomeShellState extends State<HomeShell> {
           : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) {
-          setState(() => _index = i);
-          if (i == 0) _chatRefreshSignal.value++;
-        },
+        onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: 'Chats',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.image_outlined),
+            selectedIcon: Icon(Icons.image),
+            label: 'Images',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.movie_outlined),
+            selectedIcon: Icon(Icons.movie),
+            label: 'Videos',
           ),
           NavigationDestination(
             icon: Icon(Icons.dns_outlined),
@@ -94,9 +98,10 @@ class _HomeShellState extends State<HomeShell> {
         builder: (_) => ChatScreen(conversationId: conv.id),
       ),
     );
-    // Refresh the persisted conversation list after returning.
-    _chatRefreshSignal.value++;
-    if (context.mounted) setState(() {});
+    // Refresh conversation list when returning.
+    if (context.mounted) {
+      setState(() {});
+    }
   }
 }
 

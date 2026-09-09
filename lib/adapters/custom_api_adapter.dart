@@ -42,15 +42,31 @@ class CustomApiAdapter implements AIProviderAdapter {
     if (provider.baseUrl.trim().isEmpty) {
       return 'Endpoint URL is required for a Custom API.';
     }
-    final tpl = provider.requestBodyTemplate.trim();
+    if (provider.type == ProviderType.universalHttp && provider.enabledCapabilities.isEmpty) {
+      return 'Select at least one capability for the Universal HTTP API.';
+    }
+    final tpl = _effectiveTemplate(provider, 'chat').trim();
     if (tpl.isNotEmpty && !_isValidJsonTemplate(tpl)) {
       return 'The request body template must be valid JSON (with '
           '{{PLACEHOLDERS}} allowed inside string values).';
     }
-    if (provider.responsePath.trim().isEmpty &&
+    if (provider.type == ProviderType.custom &&
+        _effectiveResponsePath(provider, 'chat').trim().isEmpty &&
         provider.httpMethod != HttpMethod.get) {
       return 'A response JSON path is required (e.g. response.text or '
           'choices[0].message.content).';
+    }
+    if (provider.type == ProviderType.universalHttp) {
+      for (final capability in provider.enabledCapabilities) {
+        final key = capability.name;
+        final endpoint = provider.capabilityEndpoints[key] ?? provider.endpoint;
+        final template = provider.capabilityRequestTemplates[key] ?? provider.requestBodyTemplate;
+        if (endpoint.trim().isEmpty) return 'Add an endpoint for ${capability.label}.';
+        if (capability != AiCapability.chat && template.trim().isEmpty &&
+            provider.capabilityEndpoints[key]!.trim().isEmpty) {
+          return 'Add a request template for ${capability.label}, or use a standard endpoint.';
+        }
+      }
     }
     return null;
   }
@@ -75,7 +91,7 @@ class CustomApiAdapter implements AIProviderAdapter {
 
   /// Substitutes template placeholders with live request values.
   String _renderBody(AiTurnRequest request) {
-    final template = request.provider.requestBodyTemplate.trim();
+    final template = _effectiveTemplate(request.provider, 'chat').trim();
     final provider = request.provider;
 
     final userMessages = request.wireMessages
@@ -104,22 +120,67 @@ class CustomApiAdapter implements AIProviderAdapter {
     }
 
     var out = body;
-    out = out.replaceAll(TemplateTokens.apiKey, request.apiKey);
-    out = out.replaceAll(TemplateTokens.model, request.model);
-    out = out.replaceAll(TemplateTokens.systemPrompt,
-        jsonEncode(request.systemPrompt).replaceAll('"', ''));
-    out = out.replaceAll(TemplateTokens.prompt, jsonEncode(prompt));
-    out = out.replaceAll(
-        TemplateTokens.messages, jsonEncode(messagesJson).replaceAll('"', ''));
+    // Tokens can appear either inside JSON strings or as raw JSON values.
+    // Use JSON-aware placeholders first, then fall back to escaped text.
+    out = _replaceJsonToken(out, TemplateTokens.systemPrompt, request.systemPrompt);
+    out = _replaceJsonToken(out, TemplateTokens.prompt, prompt);
+    out = _replaceRawJsonToken(out, TemplateTokens.messages, messagesJson);
+    out = _replaceJsonToken(out, TemplateTokens.model, request.model);
+    out = _replaceJsonToken(out, TemplateTokens.apiKey, request.apiKey);
     return out;
+  }
+
+  String _replaceJsonToken(String source, String token, String value) {
+    // If the token is quoted, replace the whole quoted token with an escaped
+    // JSON string. If it is unquoted, emit a JSON string value.
+    final quoted = '"$token"';
+    if (source.contains(quoted)) return source.replaceAll(quoted, jsonEncode(value));
+    return source.replaceAll(token, jsonEncode(value));
+  }
+
+  String _replaceRawJsonToken(String source, String token, String jsonValue) {
+    final quoted = '"$token"';
+    if (source.contains(quoted)) return source.replaceAll(quoted, jsonValue);
+    return source.replaceAll(token, jsonValue);
+  }
+
+  String _effectiveTemplate(AIProvider provider, String capability) {
+    if (provider.type == ProviderType.universalHttp) {
+      return provider.capabilityRequestTemplates[capability] ?? provider.requestBodyTemplate;
+    }
+    return provider.requestBodyTemplate;
+  }
+
+  String _effectiveResponsePath(AIProvider provider, String capability) {
+    if (provider.type == ProviderType.universalHttp) {
+      return provider.capabilityResponsePaths[capability] ?? provider.responsePath;
+    }
+    return provider.responsePath;
+  }
+
+  HttpMethod effectiveMethod(AIProvider provider, String capability) {
+    if (provider.type == ProviderType.universalHttp) {
+      return HttpMethodX.fromWire(provider.capabilityMethods[capability] ?? provider.httpMethod.wire);
+    }
+    return provider.httpMethod;
+  }
+
+  String effectiveEndpoint(AIProvider provider, String capability) {
+    if (provider.type == ProviderType.universalHttp) {
+      return provider.capabilityEndpoints[capability] ?? provider.endpoint;
+    }
+    return provider.endpoint;
   }
 
   @override
   Future<AiTurnResult> send(AiTurnRequest request) async {
     // Custom adapter v1 is non-streaming by design (capability gate).
     final provider = request.provider;
-    final method = provider.httpMethod;
-    final url = _resolveEndpoint(provider);
+    final method = effectiveMethod(provider, 'chat');
+    final effective = provider.type == ProviderType.universalHttp
+        ? provider.copyWith(endpoint: effectiveEndpoint(provider, 'chat'), requestBodyTemplate: _effectiveTemplate(provider, 'chat'), responsePath: _effectiveResponsePath(provider, 'chat'), httpMethod: method)
+        : provider;
+    final url = _resolveEndpoint(effective);
     final dio = AppDio.create(
       connectTimeout: request.connectTimeout,
       receiveTimeout: request.receiveTimeout,
@@ -184,7 +245,7 @@ class CustomApiAdapter implements AIProviderAdapter {
       if (parsed is String) {
         content = parsed;
       } else {
-        final found = resolveJsonPath(provider.responsePath, parsed);
+        final found = resolveJsonPath(_effectiveResponsePath(provider, 'chat'), parsed);
         content = found == null ? '' : found.toString();
         if (content.isEmpty) {
           // Fall back to common conventions when no path configured.
