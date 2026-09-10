@@ -7,7 +7,7 @@ abstract final class AppConstants {
   static const String appName = 'Universal AI Hub';
 
   /// App db/file version — bump when schema or key formats change.
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   static const String defaultSystemPrompt =
       'You are a helpful, friendly assistant. Keep answers clear, '
