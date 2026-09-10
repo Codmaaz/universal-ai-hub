@@ -1113,7 +1113,7 @@ class _UniversalMappingEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final caps = widget.capabilities;
+    final caps = capabilities;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const _StepLabel(
         step: 5,
