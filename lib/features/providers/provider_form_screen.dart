@@ -1150,7 +1150,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.templates[cap],
+                controller: templates[cap],
                 maxLines: 6,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 decoration: InputDecoration(
@@ -1164,7 +1164,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.responses[cap],
+                controller: responses[cap],
                 decoration: InputDecoration(
                   labelText: 'Response path (optional for automatic extraction)',
                   hintText: cap == AiCapability.chat ? 'choices[0].message.content' : 'data[0].url',
