@@ -1132,7 +1132,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               Text(cap.label, style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.methods[cap],
+                controller: methods[cap],
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
                   labelText: 'HTTP method', hintText: 'POST', isDense: true,
@@ -1140,7 +1140,7 @@ class _UniversalMappingEditor extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: widget.endpoints[cap],
+                controller: endpoints[cap],
                 decoration: InputDecoration(
                   labelText: 'Endpoint',
                   hintText: cap == AiCapability.chat ? '/chat' : '/${cap.name}',
